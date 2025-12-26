@@ -11,7 +11,7 @@ SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 class Settings(BaseSettings):
     # Browser
-    CHIMERA_HEADLESS: bool = os.getenv("CHIMERA_HEADLESS", "false").lower() == "true"
+    CHIMERA_HEADLESS: bool = os.getenv("CHIMERA_HEADLESS", "true").lower() == "true"
     
     # Ollama
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")

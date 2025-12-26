@@ -4,7 +4,7 @@
 # Professional enterprise build system for development and CI/CD
 # ============================================================================
 
-.PHONY: help install install-dev install-ollama run dev test test-backend test-frontend test-all clean lint format check security
+.PHONY: help install install-dev install-ollama run dev serve stop test test-backend test-frontend test-all clean lint format check security
 
 # Default target
 .DEFAULT_GOAL := help
@@ -29,7 +29,7 @@ help: ## Show this help message
 	@grep -E '^install.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
-	@grep -E '^(run|dev|serve):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^(run|dev|serve|stop):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
 	@grep -E '^test.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
@@ -122,6 +122,25 @@ dev: ## Start both backend and frontend in development mode
 	uv run chimera-serve
 
 serve: dev ## Alias for 'make dev'
+
+stop: ## Stop all running Chimera servers
+	@echo "$(BLUE)🛑 Stopping Chimera servers...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)→ Killing backend processes...$(NC)"
+	@pkill -f "uvicorn.*chimera" 2>/dev/null && echo "$(GREEN)  ✓ Backend stopped$(NC)" || echo "$(YELLOW)  ℹ️  No backend process found$(NC)"
+	@pkill -f "chimera-serve" 2>/dev/null && echo "$(GREEN)  ✓ Chimera-serve stopped$(NC)" || echo "$(YELLOW)  ℹ️  No chimera-serve process found$(NC)"
+	@echo ""
+	@echo "$(YELLOW)→ Killing frontend processes...$(NC)"
+	@pkill -f "vite.*5173" 2>/dev/null && echo "$(GREEN)  ✓ Frontend stopped$(NC)" || echo "$(YELLOW)  ℹ️  No frontend process found$(NC)"
+	@pkill -f "node.*vite" 2>/dev/null || true
+	@echo ""
+	@echo "$(YELLOW)→ Checking for any remaining processes...$(NC)"
+	@lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null && echo "$(GREEN)  ✓ Port 8000 freed$(NC)" || echo "$(YELLOW)  ℹ️  Port 8000 already free$(NC)"
+	@lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null && echo "$(GREEN)  ✓ Port 5173 freed$(NC)" || echo "$(YELLOW)  ℹ️  Port 5173 already free$(NC)"
+	@echo ""
+	@echo "$(GREEN)✓ All servers stopped!$(NC)"
+	@echo "$(YELLOW)Tip: Run 'make dev' to start servers again$(NC)"
+	@echo ""
 
 # ----------------------------------------------------------------------------
 # Testing
@@ -273,4 +292,4 @@ health: ## Check system health and dependencies
 
 status: health ## Alias for 'make health'
 
-.PHONY: help install install-dev install-ollama run dev serve test test-backend test-frontend test-all test-coverage lint format check security clean clean-all health status
+.PHONY: help install install-dev install-ollama run dev serve stop test test-backend test-frontend test-all test-coverage lint format check security clean clean-all health status
