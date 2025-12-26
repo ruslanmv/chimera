@@ -1,0 +1,240 @@
+name: "🧪 CI Tests - Chimera Desktop Assistant"
+
+on:
+  push:
+    branches: [main, dev, "claude/*"]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  test:
+    name: "Test Installation & UI"
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+        node-version: ["20"]
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: 📦 Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: 🔧 Install uv (Python package manager)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: ⚙️ Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          echo "✅ Ollama installed"
+
+      - name: 🧠 Start Ollama & pull test model
+        run: |
+          # Start Ollama in background
+          ollama serve &
+          OLLAMA_PID=$!
+          echo "OLLAMA_PID=$OLLAMA_PID" >> $GITHUB_ENV
+
+          # Wait for Ollama to be ready
+          echo "⏳ Waiting for Ollama to start..."
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+              echo "✅ Ollama is ready"
+              break
+            fi
+            sleep 1
+          done
+
+          # Pull a lightweight model for testing
+          echo "📥 Pulling gemma:2b model..."
+          ollama pull gemma:2b
+
+          # Verify model is available
+          ollama list
+          echo "✅ Test model ready"
+
+      - name: 🔨 Install Python dependencies
+        run: |
+          uv sync
+          echo "✅ Python dependencies installed"
+
+      - name: 📦 Install Frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+          echo "✅ Frontend dependencies installed"
+
+      - name: 🧪 Run Python unit tests
+        run: |
+          uv run pytest tests/ -v --tb=short
+        env:
+          CHIMERA_DEFAULT_PROVIDER: ollama
+          OLLAMA_BASE_URL: http://127.0.0.1:11434
+          OLLAMA_MODEL: gemma:2b
+
+      - name: 🚀 Start Chimera backend (background)
+        run: |
+          uv run chimera-serve &
+          BACKEND_PID=$!
+          echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
+
+          # Wait for backend to be ready
+          echo "⏳ Waiting for backend to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/api/health >/dev/null 2>&1; then
+              echo "✅ Backend is ready"
+              break
+            fi
+            sleep 1
+          done
+        env:
+          CHIMERA_DEFAULT_PROVIDER: ollama
+          OLLAMA_BASE_URL: http://127.0.0.1:11434
+          OLLAMA_MODEL: gemma:2b
+
+      - name: 🎨 Build frontend
+        run: |
+          cd frontend
+          npm run build
+          echo "✅ Frontend built successfully"
+
+      - name: 🌐 Start frontend dev server (background)
+        run: |
+          cd frontend
+          npm run dev &
+          FRONTEND_PID=$!
+          echo "FRONTEND_PID=$FRONTEND_PID" >> $GITHUB_ENV
+
+          # Wait for frontend to be ready
+          echo "⏳ Waiting for frontend to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:5173 >/dev/null 2>&1; then
+              echo "✅ Frontend is ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: 📸 Install Playwright for UI testing
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+          echo "✅ Playwright installed"
+
+      - name: 🧪 Run UI screenshot tests
+        run: |
+          cd frontend
+          npx playwright test
+        env:
+          CI: true
+
+      - name: 📊 Upload test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots-${{ matrix.python-version }}-${{ matrix.node-version }}
+          path: frontend/test-results/
+          retention-days: 7
+
+      - name: 🧹 Cleanup processes
+        if: always()
+        run: |
+          # Kill background processes
+          kill ${{ env.BACKEND_PID }} || true
+          kill ${{ env.FRONTEND_PID }} || true
+          kill ${{ env.OLLAMA_PID }} || true
+          echo "✅ Cleanup complete"
+
+      - name: 📈 Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            test-results/**/*.xml
+            frontend/test-results/**/*.xml
+
+  lint:
+    name: "Lint & Format Check"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 🔧 Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: 🔨 Install dependencies
+        run: |
+          uv sync --dev
+          cd frontend && npm install
+
+      - name: 🧹 Run Python linting (ruff)
+        run: |
+          uv run ruff check backend/ tests/
+
+      - name: 🎨 Run Python formatting check (black)
+        run: |
+          uv run black --check backend/ tests/
+
+      - name: ✨ Run frontend linting (eslint)
+        run: |
+          cd frontend
+          npm run lint
+
+  security:
+    name: "Security Scan"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔒 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 📤 Upload Trivy results to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
