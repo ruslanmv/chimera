@@ -33,6 +33,11 @@ class OpenAIHead(BaseLLMHead):
     # Class variable for plugin discovery
     plugin_name = "openai"
 
+    @property
+    def name(self) -> str:
+        """Plugin name for discovery"""
+        return "openai"
+
     def __init__(self):
         if not OPENAI_AVAILABLE:
             raise ImportError("openai library not installed")
@@ -50,6 +55,28 @@ class OpenAIHead(BaseLLMHead):
         self.logger = logging.getLogger(__name__)
 
         self.logger.info(f"✓ OpenAI plugin initialized (model: {self.default_model})")
+
+    async def generate_text(self, page: Any, prompt: str) -> str:
+        """
+        Generate text response (required by BaseLLMHead)
+
+        Args:
+            page: Not used for API-based provider (None)
+            prompt: User prompt
+
+        Returns:
+            Generated text response
+        """
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.default_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"OpenAI generate_text error: {e}")
+            return f"Error: {str(e)}"
 
     async def chat_completion(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

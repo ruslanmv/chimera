@@ -32,6 +32,11 @@ class WatsonXHead(BaseLLMHead):
     # Class variable for plugin discovery
     plugin_name = "watsonx"
 
+    @property
+    def name(self) -> str:
+        """Plugin name for discovery"""
+        return "watsonx"
+
     def __init__(self):
         if not WATSONX_AVAILABLE:
             raise ImportError("ibm-watsonx-ai library not installed")
@@ -59,6 +64,37 @@ class WatsonXHead(BaseLLMHead):
         self.logger = logging.getLogger(__name__)
 
         self.logger.info(f"✓ WatsonX plugin initialized (model: {self.default_model})")
+
+    async def generate_text(self, page: Any, prompt: str) -> str:
+        """
+        Generate text response (required by BaseLLMHead)
+
+        Args:
+            page: Not used for API-based provider (None)
+            prompt: User prompt
+
+        Returns:
+            Generated text response
+        """
+        try:
+            parameters = {
+                "decoding_method": "greedy",
+                "max_new_tokens": 2048,
+                "temperature": 0.7
+            }
+
+            model = Model(
+                model_id=self.default_model,
+                params=parameters,
+                credentials=self.client.credentials,
+                project_id=self.project_id
+            )
+
+            response = model.generate_text(prompt)
+            return response
+        except Exception as e:
+            self.logger.error(f"WatsonX generate_text error: {e}")
+            return f"Error: {str(e)}"
 
     async def chat_completion(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -32,6 +32,11 @@ class GeminiHead(BaseLLMHead):
     # Class variable for plugin discovery
     plugin_name = "gemini"
 
+    @property
+    def name(self) -> str:
+        """Plugin name for discovery"""
+        return "gemini"
+
     def __init__(self):
         if not GEMINI_AVAILABLE:
             raise ImportError("google-generativeai library not installed")
@@ -49,6 +54,25 @@ class GeminiHead(BaseLLMHead):
         self.logger = logging.getLogger(__name__)
 
         self.logger.info(f"✓ Gemini plugin initialized (model: {self.default_model})")
+
+    async def generate_text(self, page: Any, prompt: str) -> str:
+        """
+        Generate text response (required by BaseLLMHead)
+
+        Args:
+            page: Not used for API-based provider (None)
+            prompt: User prompt
+
+        Returns:
+            Generated text response
+        """
+        try:
+            model = genai.GenerativeModel(self.default_model)
+            response = await model.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            self.logger.error(f"Gemini generate_text error: {e}")
+            return f"Error: {str(e)}"
 
     async def chat_completion(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """

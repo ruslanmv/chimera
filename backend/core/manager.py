@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+from playwright_stealth import Stealth
 
 from .config import DATA_DIR, settings, SCREENSHOT_DIR
 from .plugin_base import BaseLLMHead
@@ -23,26 +23,43 @@ class ChimeraManager:
             if filename.endswith(".py") and not filename.startswith("__"):
                 module_name = f"backend.plugins.{filename[:-3]}"
                 module = importlib.import_module(module_name)
-                
+
                 for attr_name in dir(module):
                     attr = getattr(module, attr_name)
                     if isinstance(attr, type) and issubclass(attr, BaseLLMHead) and attr is not BaseLLMHead:
-                        instance = attr()
-                        self.heads[instance.name] = instance
-                        self.locks[instance.name] = asyncio.Lock()
-                        print(f"🧩 Plugin Loaded: {instance.name}")
+                        try:
+                            instance = attr()
+                            self.heads[instance.name] = instance
+                            self.locks[instance.name] = asyncio.Lock()
+                            print(f"🧩 Plugin Loaded: {instance.name}")
+                        except (ValueError, ImportError) as e:
+                            # Skip plugins that fail to initialize (e.g., missing API keys)
+                            print(f"⚠️  Plugin {attr_name} skipped: {str(e).splitlines()[0]}")
+                        except Exception as e:
+                            # Log unexpected errors but continue loading other plugins
+                            print(f"❌ Plugin {attr_name} failed: {e}")
 
     async def start_engine(self):
-        self.playwright = await async_playwright().start()
-        
-        # We only need a persistent browser context for "browser heads".
-        # But starting it always is fine and keeps architecture simple.
-        self.context = await self.playwright.chromium.launch_persistent_context(
-            user_data_dir=DATA_DIR,
-            headless=settings.CHIMERA_HEADLESS,
-            args=["--disable-blink-features=AutomationControlled"],
-            viewport={"width": 1280, "height": 800}
-        )
+        # Only start Playwright if we have browser-based plugins
+        has_browser_heads = any(head.supports_browser for head in self.heads.values())
+
+        if has_browser_heads:
+            try:
+                self.playwright = await async_playwright().start()
+
+                # Launch persistent browser context for browser heads
+                self.context = await self.playwright.chromium.launch_persistent_context(
+                    user_data_dir=DATA_DIR,
+                    headless=settings.CHIMERA_HEADLESS,
+                    args=["--disable-blink-features=AutomationControlled"],
+                    viewport={"width": 1280, "height": 800}
+                )
+                print(f"🌐 Playwright browser initialized (headless={settings.CHIMERA_HEADLESS})")
+            except Exception as e:
+                print(f"⚠️  Playwright initialization failed: {e}")
+                print(f"⚠️  Browser-based plugins will not be available")
+        else:
+            print(f"ℹ️  No browser-based plugins loaded, skipping Playwright initialization")
 
     async def get_page(self, head_name: str):
         if head_name not in self.heads:
@@ -57,7 +74,8 @@ class ChimeraManager:
             
         print(f"🔌 Spawning {head_name} browser session...")
         page = await self.context.new_page()
-        await stealth_async(page)
+        stealth = Stealth()
+        await stealth.apply_stealth_async(page)
         await page.goto(head.start_url)
         self.active_pages[head_name] = page
         return page

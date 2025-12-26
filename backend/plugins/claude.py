@@ -34,6 +34,11 @@ class ClaudeHead(BaseLLMHead):
     # Class variable for plugin discovery
     plugin_name = "claude"
 
+    @property
+    def name(self) -> str:
+        """Plugin name for discovery"""
+        return "claude"
+
     def __init__(self):
         if not ANTHROPIC_AVAILABLE:
             raise ImportError("anthropic library not installed")
@@ -51,6 +56,31 @@ class ClaudeHead(BaseLLMHead):
         self.logger = logging.getLogger(__name__)
 
         self.logger.info(f"✓ Claude plugin initialized (model: {self.default_model})")
+
+    async def generate_text(self, page: Any, prompt: str) -> str:
+        """
+        Generate text response (required by BaseLLMHead)
+
+        Args:
+            page: Not used for API-based provider (None)
+            prompt: User prompt
+
+        Returns:
+            Generated text response
+        """
+        try:
+            response = await self.client.messages.create(
+                model=self.default_model,
+                max_tokens=8192,
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+            return response.content[0].text
+        except Exception as e:
+            self.logger.error(f"Claude generate_text error: {e}")
+            return f"Error: {str(e)}"
 
     async def chat_completion(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
