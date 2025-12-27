@@ -55,6 +55,19 @@ class ChimeraManager:
                     viewport={"width": 1280, "height": 800}
                 )
                 print(f"🌐 Playwright browser initialized (headless={settings.CHIMERA_HEADLESS})")
+            except FileNotFoundError as e:
+                print(f"⚠️  Playwright initialization failed: {e}")
+                print("╔════════════════════════════════════════════════════════════╗")
+                print("║ Looks like Playwright was just installed or updated.       ║")
+                print("║ Please run the following command to download new browsers: ║")
+                print("║                                                            ║")
+                print("║     playwright install chromium                            ║")
+                print("║                                                            ║")
+                print("║ Or run: make install-dev                                   ║")
+                print("║                                                            ║")
+                print("║ <3 Playwright Team                                         ║")
+                print("╚════════════════════════════════════════════════════════════╝")
+                print("⚠️  Browser-based plugins will not be available")
             except Exception as e:
                 print(f"⚠️  Playwright initialization failed: {e}")
                 print(f"⚠️  Browser-based plugins will not be available")
