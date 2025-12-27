@@ -25,5 +25,13 @@ class OllamaHead(BaseLLMHead):
                 r.raise_for_status()
                 data = r.json()
                 return data.get("response", "").strip() or "No response."
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return f"[ollama error] Ollama server is running but model '{settings.OLLAMA_MODEL}' not found. Please run: ollama pull {settings.OLLAMA_MODEL}"
+            return f"[ollama error] HTTP {e.response.status_code}: {e.response.text}"
+        except httpx.ConnectError:
+            return f"[ollama error] Cannot connect to Ollama server at {settings.OLLAMA_BASE_URL}. Please ensure Ollama is running with: ollama serve"
+        except httpx.TimeoutException:
+            return f"[ollama error] Request timeout. The model might be loading or processing is slow."
         except Exception as e:
-            return f"[ollama error] {e}"
+            return f"[ollama error] {type(e).__name__}: {e}"

@@ -19,6 +19,7 @@ class LLMProvider(str, Enum):
     chimera = "chimera"  # Default managed server
     openai = "openai"
     claude = "claude"
+    gemini = "gemini"
     watsonx = "watsonx"
     ollama = "ollama"
 
@@ -62,6 +63,22 @@ class WatsonxSettings(BaseSettings):
     )
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1)
+
+
+class GeminiSettings(BaseSettings):
+    """Google Gemini configuration"""
+
+    model_config = SettingsConfigDict(env_prefix="GEMINI_", case_sensitive=False)
+
+    api_key: Optional[str] = Field(default=None, description="Google Gemini API key (or use GOOGLE_API_KEY)")
+    model: str = Field(default="gemini-2.0-flash-exp", description="Gemini model to use")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=2048, ge=1)
+
+    @property
+    def effective_api_key(self) -> Optional[str]:
+        """Get API key from GEMINI_API_KEY or GOOGLE_API_KEY"""
+        return self.api_key or os.getenv("GOOGLE_API_KEY")
 
 
 class OllamaSettings(BaseSettings):
@@ -121,6 +138,7 @@ class AppSettings(BaseSettings):
     chimera_server: ChimeraServerSettings = Field(default_factory=ChimeraServerSettings)
     openai: OpenAISettings = Field(default_factory=OpenAISettings)
     claude: ClaudeSettings = Field(default_factory=ClaudeSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     watsonx: WatsonxSettings = Field(default_factory=WatsonxSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
 

@@ -4,7 +4,7 @@
 # Professional enterprise build system for development and CI/CD
 # ============================================================================
 
-.PHONY: help install install-dev install-ollama run dev serve stop test test-backend test-frontend test-all clean lint format check security
+.PHONY: help install install-dev install-ollama run dev serve launch stop test test-backend test-frontend test-all clean lint format check security
 
 # Default target
 .DEFAULT_GOAL := help
@@ -29,7 +29,7 @@ help: ## Show this help message
 	@grep -E '^install.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
-	@grep -E '^(run|dev|serve|stop):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^(run|dev|serve|launch|stop):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
 	@grep -E '^test.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
@@ -123,6 +123,21 @@ dev: ## Start both backend and frontend in development mode
 
 serve: dev ## Alias for 'make dev'
 
+launch: ## Launch Chimera as a desktop application using Eel
+	@echo "$(BLUE)🚀 Launching Chimera Desktop Application...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Building frontend...$(NC)"
+	@cd frontend && npm run build
+	@echo ""
+	@echo "$(GREEN)✓ Frontend built$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Installing dependencies...$(NC)"
+	@uv sync
+	@echo ""
+	@echo "$(GREEN)Starting desktop application...$(NC)"
+	@echo ""
+	@uv run chimera-launch
+
 stop: ## Stop all running Chimera servers
 	@echo "$(BLUE)🛑 Stopping Chimera servers...$(NC)"
 	@echo ""
@@ -152,19 +167,19 @@ test-backend: ## Run Python backend tests
 	@echo "$(BLUE)🧪 Running Python backend tests...$(NC)"
 	@echo ""
 	@if ! command -v ollama >/dev/null 2>&1; then \
-		echo "$(YELLOW)⚠️  Ollama not found. Installing...$(NC)"; \
-		make install-ollama; \
-	fi
-	@echo "$(GREEN)→ Checking Ollama server...$(NC)"
-	@if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then \
-		echo "$(YELLOW)→ Starting Ollama server...$(NC)"; \
-		ollama serve > /tmp/ollama.log 2>&1 & \
-		sleep 3; \
-	fi
-	@echo "$(GREEN)→ Checking test model...$(NC)"
-	@if ! ollama list | grep -q "gemma:2b"; then \
-		echo "$(YELLOW)→ Pulling test model (gemma:2b)...$(NC)"; \
-		ollama pull gemma:2b; \
+		echo "$(YELLOW)⚠️  Ollama not found. Tests will run without Ollama integration tests.$(NC)"; \
+	else \
+		echo "$(GREEN)→ Checking Ollama server...$(NC)"; \
+		if ! curl -s http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then \
+			echo "$(YELLOW)→ Starting Ollama server...$(NC)"; \
+			ollama serve > /tmp/ollama.log 2>&1 & \
+			sleep 3; \
+		fi; \
+		echo "$(GREEN)→ Checking test model...$(NC)"; \
+		if ! ollama list | grep -q "gemma:2b"; then \
+			echo "$(YELLOW)→ Pulling test model (gemma:2b)...$(NC)"; \
+			ollama pull gemma:2b; \
+		fi; \
 	fi
 	@echo "$(GREEN)→ Running pytest...$(NC)"
 	@CHIMERA_DEFAULT_PROVIDER=ollama \
@@ -173,6 +188,14 @@ test-backend: ## Run Python backend tests
 	uv run pytest tests/ -v --tb=short
 	@echo ""
 	@echo "$(GREEN)✓ Backend tests complete!$(NC)"
+
+test-launch: ## Test the Eel launcher functionality
+	@echo "$(BLUE)🧪 Testing Eel launcher...$(NC)"
+	@echo ""
+	@echo "$(GREEN)→ Running launcher tests...$(NC)"
+	@uv run pytest tests/test_eel_launcher.py -v --tb=short
+	@echo ""
+	@echo "$(GREEN)✓ Launcher tests complete!$(NC)"
 
 test-frontend: ## Run Playwright UI tests
 	@echo "$(BLUE)🧪 Running Playwright UI tests...$(NC)"
